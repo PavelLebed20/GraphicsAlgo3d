@@ -24,7 +24,6 @@ SOFTWARE.
 
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn import clone
 
 w = 1920
 h = 1080
@@ -104,16 +103,21 @@ def trace_ray(rayO, rayD):
     toL = normalize(L - M)
     toO = normalize(O - M)
     # Shadow: find if the point is shadowed or not.
-    l = [intersect(M + N * .0001, toL, obj_sh)
+    shadow_coef = 1.
+    l = [(intersect(M + N * .0001, toL, obj_sh), k)
             for k, obj_sh in enumerate(scene) if k != obj_idx]
-    if l and min(l) < np.inf:
-        return
+    if l:
+        for sh_int in l:
+            if sh_int[0] < np.inf:
+                sh_obj = scene[sh_int[1]]
+                shadow_coef *= sh_obj.get('transparency', 0.)
     # Start computing the color.
     col_ray = ambient
     # Lambert shading (diffuse).
     col_ray += obj.get('diffuse_c', diffuse_c) * max(np.dot(N, toL), 0) * color
     # Blinn-Phong shading (specular).
     col_ray += obj.get('specular_c', specular_c) * max(np.dot(N, normalize(toL + toO)), 0) ** specular_k * color_light
+    col_ray *= shadow_coef
     return obj, M, N, col_ray
 
 def add_sphere(position, radius, color, reflection=.2,
@@ -135,7 +139,7 @@ def add_plane(position, normal,
 color_plane0 = 1. * np.ones(3)
 color_plane1 = 0. * np.ones(3)
 scene = [add_sphere([.75, .1, 1.], .6, [0., 0., 1.], transparency=0.7, refrcoeff=1.3),
-         add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5], transparency=0.9, refrcoeff=1.6),
+         add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5], transparency=0.9, refrcoeff=1.1),
          add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184], transparency=1.0, refrcoeff=1.0),
          add_plane([0., -.5, 0.], [0., 1., 0.]),
     ]
@@ -172,7 +176,7 @@ def refract(v, n, q):
     b = nv * a + np.math.sqrt(D)
     return (a * v) - (b * n)
 
-def ray_trace(rayO, rayD, reflection, col, depth, isOutIntersection):
+def ray_trace(rayO, rayD, power, col, depth, isOutIntersection):
     if depth >= depth_max:
         return True
 
@@ -181,12 +185,11 @@ def ray_trace(rayO, rayD, reflection, col, depth, isOutIntersection):
         return False
 
     obj, M, N, col_ray = traced
-    col += reflection * col_ray
-    #depth += 1
+    col += power * (1 - obj.get('transparency', 0.)) * col_ray
 
     # Reflection: create a new ray.
     rayO1, rayD1 = M + N * isOutIntersection * .0001, normalize(rayD - 2 * np.dot(rayD, N) * N)
-    if ray_trace(rayO1, rayD1, reflection * obj.get('reflection', 1.), col, depth + 1, isOutIntersection):
+    if ray_trace(rayO1, rayD1, power * obj.get('reflection', 1.), col, depth + 1, isOutIntersection):
         return False
 
     # Refraction
@@ -194,8 +197,7 @@ def ray_trace(rayO, rayD, reflection, col, depth, isOutIntersection):
     if dir is None:
         return False
     rayO2, rayD2 = M - N * isOutIntersection * .0001, dir
-    #col += reflection * col_ray
-    if ray_trace(rayO2, rayD2, reflection * obj.get('transparency', 1.), col, depth + 1, isOutIntersection * (-1)):
+    if ray_trace(rayO2, rayD2, power * obj.get('transparency', 1.), col, depth + 1, isOutIntersection * (-1)):
         return False
 
     return False
@@ -211,9 +213,9 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
         D = normalize(Q - O)
         depth = 0
         rayO, rayD = O, D
-        reflection = 1.
+        power = 1
         isOutIntersection = 1
-        ray_trace(rayO, rayD, reflection, col, depth, isOutIntersection)
+        ray_trace(rayO, rayD, power, col, depth, isOutIntersection)
         img[h - j - 1, i, :] = np.clip(col, 0, 1)
 
 plt.imsave('fig.png', img)
