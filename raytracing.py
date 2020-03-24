@@ -176,7 +176,7 @@ def refract(v, n, q):
     b = nv * a + np.math.sqrt(D)
     return (a * v) - (b * n)
 
-def ray_trace(rayO, rayD, power, col, depth, isOutIntersection):
+def process_pixel(rayO, rayD, power, col, depth, isOutIntersection):
     if depth >= depth_max:
         return True
 
@@ -189,7 +189,7 @@ def ray_trace(rayO, rayD, power, col, depth, isOutIntersection):
 
     # Reflection: create a new ray.
     rayO1, rayD1 = M + N * isOutIntersection * .0001, normalize(rayD - 2 * np.dot(rayD, N) * N)
-    if ray_trace(rayO1, rayD1, power * obj.get('reflection', 1.), col, depth + 1, isOutIntersection):
+    if process_pixel(rayO1, rayD1, power * obj.get('reflection', 1.), col, depth + 1, isOutIntersection):
         return False
 
     # Refraction
@@ -197,7 +197,7 @@ def ray_trace(rayO, rayD, power, col, depth, isOutIntersection):
     if dir is None:
         return False
     rayO2, rayD2 = M - N * isOutIntersection * .0001, dir
-    if ray_trace(rayO2, rayD2, power * obj.get('transparency', 1.), col, depth + 1, isOutIntersection * (-1)):
+    if process_pixel(rayO2, rayD2, power * obj.get('transparency', 1.), col, depth + 1, isOutIntersection * (-1)):
         return False
 
     return False
@@ -215,7 +215,7 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
         rayO, rayD = O, D
         power = 1
         isOutIntersection = 1
-        ray_trace(rayO, rayD, power, col, depth, isOutIntersection)
+        process_pixel(rayO, rayD, power, col, depth, isOutIntersection)
         img[h - j - 1, i, :] = np.clip(col, 0, 1)
 
 plt.imsave('fig.png', img)
